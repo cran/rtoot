@@ -1,0 +1,48 @@
+---
+title: "Authentication with rtoot"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Authentication with rtoot}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+When a function in `rtoot` can't find a valid token on your computer, it automatically starts authentication.
+If you want to start the process manually, you can do so by calling:
+
+```{r auth, eval=FALSE}
+library(rtoot)
+auth_setup()
+```
+
+By default, the token is stored in a directory R has determined to make sense for you and it is called "rtoot_token.rds".
+So you do not need to worry about it if you are only using `rtoot` on your local machine and you are only using one token.
+
+If you do not change the `path` argument of `auth_setup()` the tokens get stored in the location returned by `tools::R_user_dir("rtoot", "config")`.
+Look there, if you want to copy a token to a different computer (ideally in the directory returned by `tools::R_user_dir("rtoot", "config")` on the new machine).
+
+If you want to use multiple tokens, you should change the name of the file the token is saved in:
+
+```{r name, eval=FALSE}
+auth_setup(name = "account1")
+```
+
+To use this token, you can either read it into your environment and provide it to each function:
+
+```{r token, eval=FALSE}
+token <- readRDS(file.path(tools::R_user_dir("rtoot", "config"), "account1.rds"))
+get_status(id = "109297677620300632", instance = "mastodon.social", token = token)
+```
+
+Or you can set the default token in the options at the start of a session:
+
+```{r options, eval=FALSE}
+options("rtoot_token" = file.path(tools::R_user_dir("rtoot", "config"), "account1.rds"))
+```
