@@ -18,3 +18,10 @@ knitr::opts_chunk$set(
 ## ----options, eval=FALSE------------------------------------------------------
 #  options("rtoot_token" = file.path(tools::R_user_dir("rtoot", "config"), "account1.rds"))
 
+## ----clipboard, eval = FALSE--------------------------------------------------
+#  auth_setup(clipboard = TRUE)
+
+## ----convert, eval = FALSE----------------------------------------------------
+#  token <- readRDS(file.path(tools::R_user_dir("rtoot", "config"), "account1.rds"))
+#  content <- convert_token_to_envvar(token)
+

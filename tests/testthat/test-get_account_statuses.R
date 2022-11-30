@@ -1,7 +1,6 @@
-fake_token <- list(bearer = Sys.getenv("RTOOT_DEFAULT_TOKEN"))
+fake_token <- rtoot:::get_token_from_envvar("RTOOT_DEFAULT_TOKEN", check_stop = FALSE)
 fake_token$type <- "user"
 fake_token$instance <- "social.tchncs.de"
-class(fake_token) <- "rtoot_bearer"
 
 test_that("get_account_statuses", {
   vcr::use_cassette("get_account_statuses_default", {
@@ -16,4 +15,14 @@ test_that("get_account_statuses", {
   })
   expect_false("tbl_df" %in% class(x))
   ## Doesn't test instance and anonymous; see test_search_accounts.R
+})
+
+test_that("get_account_statuses, limit", {
+  ## whether it can flip pages
+  vcr::use_cassette("get_account_statuses_limit", {
+    id <- "109281650341067731"
+    x <- get_account_statuses(id = id, instance = "social.tchncs.de", limit = 100, token = fake_token)
+  })
+  expect_true(nrow(x) > 40) # it should have 43
+  expect_true("tbl_df" %in% class(x))
 })

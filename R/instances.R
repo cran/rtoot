@@ -1,7 +1,7 @@
 #' Get a list of fediverse servers
 #'
 #' @param n number of servers to show
-#' @details the results are sorted by user count
+#' @details the results are sorted by user count. The function sometimes fails unexpectedly for n>100. Try to rerun your request in that case or use a smaller n.
 #' @return tibble of fediverse instances
 #' @export
 #' @examples
@@ -16,6 +16,7 @@ get_fedi_instances  <-  function(n = 20) {
                             instance = "api.index.community", params = list(sortField = "userCount", sortDirection = "desc", page = i),
                             anonymous = TRUE)
     df <- dplyr::bind_rows(df, dplyr::bind_rows(tmp$instances))
+    Sys.sleep(stats::runif(1,1,2))
   }
   df[seq_len(n),]
 }
@@ -37,6 +38,8 @@ get_fedi_instances  <-  function(n = 20) {
 #'   \item{get_instance_emoji}{Lists custom emojis available on the instance}
 #'   \item{get_instance_directory}{A directory of profiles that the instance is aware of}
 #'   \item{get_instance_trends}{Tags that are being used more frequently within the past week}
+#'   \item{get_instance_rules}{Prints the rules of an instance}
+#'   \item{get_instance_blocks}{List of domains that are blocked by an instance.}
 #' }
 #' @return instance details as list or tibble depending on call function
 #' @examples
@@ -45,22 +48,20 @@ get_fedi_instances  <-  function(n = 20) {
 #'  get_instance_activity("mastodon.social")
 #'  get_instance_emoji("mastodon.social")
 #'  get_instance_peers("mastodon.social")
-#'  get_instance_directory("mastodon.social",limit=2)
+#'  get_instance_directory("mastodon.social",limit = 2)
 #' }
 #' @export
 get_instance_general <- function(instance = NULL,token = NULL, anonymous = TRUE){
-  request_results <- make_get_request(token = token,path = "/api/v1/instance",
-                                      instance = instance,params = list(),
-                                      anonymous = anonymous)
-  request_results #TODO:format?
+  make_get_request(token = token,path = "/api/v1/instance",
+                   instance = instance,
+                   anonymous = anonymous) #TODO:format?
 }
 
 #' @rdname get_instance
 #' @export
 get_instance_peers <- function(instance = NULL,token = NULL, anonymous = TRUE){
   request_results <- make_get_request(token = token,path = "/api/v1/instance/peers",
-                                      instance = instance,params = list(),
-                                      anonymous = anonymous)
+                                      instance = instance, anonymous = anonymous)
   unlist(request_results)
 }
 
@@ -68,9 +69,7 @@ get_instance_peers <- function(instance = NULL,token = NULL, anonymous = TRUE){
 #' @export
 get_instance_activity <- function(instance = NULL,token = NULL, anonymous = TRUE){
   request_results <- make_get_request(token = token,path = "/api/v1/instance/activity",
-                                      instance = instance,params = list(),
-                                      anonymous = anonymous)
-
+                                      instance = instance, anonymous = anonymous)
   tbl <- dplyr::bind_rows(request_results)
   tbl <- dplyr::mutate(tbl,dplyr::across(dplyr::everything(),as.integer))
   tbl$week <- as.POSIXct(tbl$week,origin="1970-01-01",tz = "UTC")
@@ -81,8 +80,7 @@ get_instance_activity <- function(instance = NULL,token = NULL, anonymous = TRUE
 #' @export
 get_instance_emoji <- function(instance = NULL,token = NULL, anonymous = TRUE){
   request_results <- make_get_request(token = token,path = "/api/v1/custom_emojis",
-                                      instance = instance,params = list(),
-                                      anonymous = anonymous)
+                                      instance = instance, anonymous = anonymous)
   dplyr::bind_rows(request_results)
 }
 
@@ -111,5 +109,23 @@ get_instance_trends <- function(instance = NULL, token = NULL, limit = 10,anonym
   tbl$accounts <- vapply(tbl$history,function(x) as.integer(x$accounts),0L)
   tbl$uses <- vapply(tbl$history,function(x) as.integer(x$uses),0L)
   tbl$history <- NULL
+  tbl
+}
+
+#' @rdname get_instance
+#' @export
+get_instance_rules <- function(instance = NULL, token = NULL, anonymous = TRUE){
+  request_results <- make_get_request(token = token,path = "/api/v1/instance/rules",
+                                      instance = instance, anonymous = anonymous)
+  tbl <- dplyr::bind_rows(request_results)
+  tbl
+}
+
+#' @rdname get_instance
+#' @export
+get_instance_blocks <- function(instance = NULL, token = NULL, anonymous = TRUE){
+  request_results <- make_get_request(token = token,path = "api/v1/instance/domain_blocks",
+                                      instance = instance, anonymous = anonymous)
+  tbl <- dplyr::bind_rows(request_results)
   tbl
 }

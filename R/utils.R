@@ -1,8 +1,7 @@
-#' @export
-print.rtoot_client <- function(x,...){
-  cat("<mastodon client> for instance:", x$instance, "\n")
-  invisible(x)
-}
+# print.rtoot_client <- function(x,...){
+#   cat("<mastodon client> for instance:", x$instance, "\n")
+#   invisible(x)
+# }
 
 #' @export
 print.rtoot_bearer <- function(x,...){
@@ -15,7 +14,7 @@ print.rtoot_bearer <- function(x,...){
 ## https://docs.joinmastodon.org/methods/statuses/
 ## https://docs.joinmastodon.org/methods/timelines/
 
-make_get_request <- function(token, path, params, instance = NULL, anonymous = FALSE, ...) {
+make_get_request <- function(token, path, params = list(), instance = NULL, anonymous = FALSE, ...) {
   if (is.null(instance) && anonymous) {
     stop("provide either an instance or a token")
   }
@@ -26,7 +25,7 @@ make_get_request <- function(token, path, params, instance = NULL, anonymous = F
     config <- httr::add_headers(Authorization = paste('Bearer', token$bearer))
   } else {
     url <- prepare_url(instance)
-    config = list()
+    config <- list()
   }
 
   request_results <- httr::GET(httr::modify_url(url, path = path),
@@ -73,16 +72,48 @@ parse_header <- function(header){
 
 #process a get request and parse output
 process_request <- function(token = NULL,
-                path,
-                instance = NULL,
-                params,
-                anonymous = FALSE,
-                parse = TRUE,
-                FUN = identity
+                            path,
+                            instance = NULL,
+                            params = list(),
+                            anonymous = FALSE,
+                            parse = TRUE,
+                            FUN = identity,
+                            n = 1L,
+                            page_size = 40L,
+                            retryonratelimit = TRUE,
+                            verbose = TRUE
 ){
-  output <- make_get_request(token = token,path = path,
-                             instance = instance, params = params,
-                             anonymous = anonymous)
+  # if since_id is provided we page forward, otherwise we page backwards
+  if(!is.null(params[["since_id"]])){
+    pager <- "since_id"
+  } else{
+    pager <- "max_id"
+  }
+  pages <- ceiling(n/page_size)
+  output <- vector("list")
+  for(i in seq_len(pages)){
+    tmp <- make_get_request(token = token,path = path,
+                            instance = instance, params = params,
+                            anonymous = anonymous)
+
+    if(rate_limit_remaining(tmp)==0){
+      if(isTRUE(retryonratelimit)){
+        wait_until(attr(tmp,"headers")[["rate_reset"]],verbose)
+      } else{
+        output <- c(output,tmp)
+        attr(output,"headers") <- attr(tmp,"headers")
+        sayif(verbose,"rate limit reached and `retryonratelimit=FALSE`. returning current results.")
+        break
+      }
+    }
+    output <- c(output,tmp)
+    attr(output,"headers") <- attr(tmp,"headers")
+    if(is.null(attr(tmp,"headers")[[pager]])){
+      break
+    }
+    params[[pager]] <- attr(tmp,"headers")[[pager]]
+  }
+
   if (isTRUE(parse)) {
     header <- attr(output,"headers")
 
@@ -92,10 +123,87 @@ process_request <- function(token = NULL,
   return(output)
 }
 
+
 ##vectorize function
 v <- function(FUN) {
   v_FUN <- function(x) {
     dplyr::bind_rows(lapply(x, FUN))
   }
   return(v_FUN)
+}
+
+sayif <- function(verbose, ...) {
+  if (isTRUE(verbose)) {
+    message(...)
+  }
+}
+
+# inspired by rtweet
+wait_until <- function(until, from = Sys.time(), verbose = TRUE){
+  seconds <- ceiling(as.numeric(until) - unclass(from))
+  if(seconds>0){
+    sayif(verbose,"Rate limit exceeded, waiting for ",seconds," seconds")
+    Sys.sleep(seconds)
+  }
+  return(invisible())
+}
+
+rate_limit_remaining <- function(object){
+  if(is.null(attr(object,"headers"))){
+    stop("no header information found")
+  }
+  header <- attr(object,"headers")
+  if(is.null(header[["rate_remaining"]])){
+    stop("no rate limit information found")
+  } else{
+    return(as.numeric(header[["rate_remaining"]]))
+  }
+}
+
+## A kind of drop-in replacement of utils::menu, with a plus
+rtoot_menu <- function(choices = c("yes", "no"), title, default = 2L, verbose = TRUE) {
+  if (!is.null(options("rtoot_cheatcode")$rtoot_cheatcode)) {
+    if (options("rtoot_cheatcode")$rtoot_cheatcode == "uuddlrlrba") {
+      sayif(verbose, title)
+      return(options("rtoot_cheat_answer")$rtoot_cheat_answer) ### VW-Style cheating!
+    }
+  }
+  if (isFALSE(interactive())) {
+    return(default)
+  }
+  return(utils::menu(choices = choices, title = title))
+}
+
+## A kind of drop-in replacement of base:readline, with a plus
+rtoot_ask <- function(prompt = "enter authorization code: ", pass = TRUE, check_rstudio = TRUE, default = "pass", verbose = TRUE) {
+  if (!is.null(options("rtoot_cheatcode")$rtoot_cheatcode)) {
+    if (options("rtoot_cheatcode")$rtoot_cheatcode == "uuddlrlrba") {
+      sayif(verbose, prompt)
+      return(options("rtoot_cheat_ask_answer")$rtoot_cheat_ask_answer)
+    }
+  }
+  if (isFALSE(interactive())) {
+    sayif(verbose, prompt)
+    return(default)
+  }
+  passFun <- readline
+  if (isTRUE(pass) && isTRUE(check_rstudio) && (requireNamespace("rstudioapi", quietly = TRUE))) {
+    if (rstudioapi::isAvailable()) {
+      passFun <- rstudioapi::askForPassword
+    }
+  }
+  return(passFun(prompt = prompt))
+}
+
+handle_params <- function(params, max_id, since_id, min_id) {
+    if (!missing(max_id)) {
+        params$max_id <- max_id
+    }
+    if (!missing(since_id)) {
+        params$since_id <- since_id
+    }
+    if (!missing(min_id)) {
+        params$min_id <- min_id
+    }
+    params
 }

@@ -2,18 +2,26 @@
 % Please edit documentation in R/auth.R
 \name{verify_credentials}
 \alias{verify_credentials}
-\title{verify mastodon credentials}
+\alias{verify_envvar}
+\title{Verify mastodon credentials}
 \usage{
-verify_credentials(token)
+verify_credentials(token, verbose = TRUE)
+
+verify_envvar(verbose = TRUE)
 }
 \arguments{
 \item{token}{bearer token, either public or user level}
+
+\item{verbose}{logical whether to display messages}
 }
 \value{
-success or failure message of the verification process
+Raise an error if the token is not valid. Return the response from the verification API invisibly otherwise.
 }
 \description{
-verify mastodon credentials
+Verify mastodon credentials
+}
+\details{
+If you have created your token as an environment variable, use \code{verify_envvar} to verify your token.
 }
 \examples{
 \dontrun{

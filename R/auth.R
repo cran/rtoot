@@ -7,27 +7,44 @@
 #' @param name give the token a name, in case you want to store more than one.
 #' @param path path to store the token in. The default is to store tokens in the
 #'   path returned by `tools::R_user_dir("rtoot", "config")`.
-#'
+#' @param clipboard logical, whether to export the token to the clipboard
+#' @param verbose logical whether to display messages
 #' @details If either `name` or `path` are set to `FALSE`, the token is only
-#'   returned and not saved.
-#'
+#'   returned and not saved. If you would like to save your token as an environment variable,
+#'   please set `clipboard` to `TRUE`. Your token will be copied to clipboard in the environment variable
+#'   format. Please paste it into your environment file, e.g. ".Renviron", and restart
+#'   your R session.
 #' @return A bearer token
+#' @seealso [verify_credentials()], [convert_token_to_envvar()]
 #' @examples
+#' \dontrun{
 #' auth_setup("mastodon.social", "public")
+#' }
 #' @export
-auth_setup <- function(instance = NULL, type = NULL, name = NULL, path = NULL) {
+auth_setup <- function(instance = NULL, type = NULL, name = NULL, path = NULL, clipboard = FALSE, verbose = TRUE) {
   while (is.null(instance) || instance == "") {
-    instance <- readline(prompt = "On which instance do you want to authenticate (e.g., \"mastodon.social\")? ")
+    instance <- rtoot_ask(prompt = "On which instance do you want to authenticate (e.g., \"mastodon.social\")? ", pass = FALSE)
   }
   client <- get_client(instance = instance)
   if (!isTRUE(type %in% c("public", "user"))) {
-    type <- c("public", "user")[utils::menu(c("public", "user"), title = "What type of token do you want?")]
+    type <- c("public", "user")[rtoot_menu(choices = c("public", "user"), title = "What type of token do you want?", verbose = TRUE)]
   }
-  token <- create_token(client, type = type)
-  if (!isFALSE(name) && !isFALSE(path)) token_path <- save_auth_rtoot(token, name, path)
-  options("rtoot_token" = token_path)
-  verify_credentials(token) # this should be further up before saving, but seems to often fail
-  check_token_rtoot(token)
+  token <- process_created_token(create_token(client, type = type), name = name, path = path, clipboard = clipboard, verify = TRUE, verbose = verbose)
+  return(token) ## explicit
+}
+
+process_created_token <- function(token, name = NULL, path = NULL, clipboard = FALSE, verify = TRUE, verbose = TRUE) {
+  if (!isFALSE(name) && !isFALSE(path)) {
+    token_path <- save_auth_rtoot(token, name, path)
+    options("rtoot_token" = token_path)
+  }
+  if (isTRUE(verify)) {
+    verify_credentials(token, verbose = verbose) # this should be further up before saving, but seems to often fail
+  }
+  if (isTRUE(clipboard)) {
+    convert_token_to_envvar(token = token, clipboard = TRUE, verbose = verbose)
+  }
+  check_token_rtoot(token, verbose = verbose)
 }
 
 ## login described at https://docs.joinmastodon.org/client/authorized/
@@ -77,13 +94,7 @@ create_token <- function(client, type = "public"){
       scope='read write follow',
       response_type="code"
       ))
-    passFun <- readline
-    if (requireNamespace("rstudioapi", quietly = TRUE)) {
-      if (rstudioapi::isAvailable()) {
-        passFun <- rstudioapi::askForPassword
-      }
-    }
-    auth_code <- passFun(prompt = "enter authorization code: ")
+    auth_code <- rtoot_ask(prompt = "enter authorization code: ", pass = TRUE, check_rstudio = TRUE, default = "")
     auth2 <- httr::POST(httr::modify_url(url = url, path = "oauth/token"),body=list(
       client_id=client$client_id ,
       client_secret=client$client_secret,
@@ -100,18 +111,19 @@ create_token <- function(client, type = "public"){
   bearer
 }
 
-
-#' verify mastodon credentials
+#' Verify mastodon credentials
 #'
 #' @param token bearer token, either public or user level
-#' @return success or failure message of the verification process
+#' @return Raise an error if the token is not valid. Return the response from the verification API invisibly otherwise.
+#' @details If you have created your token as an environment variable, use `verify_envvar` to verify your token.
+#' @inheritParams auth_setup
 #' @examples
 #' \dontrun{
 #' #read a token from a file
 #' verify_credentials(token)
 #' }
 #' @export
-verify_credentials <- function(token) {
+verify_credentials <- function(token, verbose = TRUE) {
   if(!is_auth_rtoot(token)){
     stop("token is not an object of type rtoot_bearer")
   }
@@ -132,11 +144,18 @@ verify_credentials <- function(token) {
   }
   success <- isTRUE(acc[["status_code"]] == 200L)
   if (success) {
-    message("Token of type \"", token$type, "\" for instance ", token$instance, " is valid")
+    sayif(verbose, "Token of type \"", token$type, "\" for instance ", token$instance, " is valid")
   } else {
     stop("Token not valid. Use auth_setup() to create a token")
   }
   invisible(acc)
+}
+
+#' @export
+#' @rdname verify_credentials
+verify_envvar <- function(verbose = TRUE) {
+  token <- get_token_from_envvar()
+  verify_credentials(token, verbose = verbose)
 }
 
 #' save a bearer token to file
@@ -160,26 +179,74 @@ save_auth_rtoot <- function(token, name = NULL, path = NULL){
   invisible(out_file)
 }
 
-get_auth_rtoot <- function(){
-
-  path <- file.path(tools::R_user_dir("rtoot", "config"), "default.rds")
-  if(!file.exists(path)){
-    stop("no token found in default location. Use save_auth_rtoot(token) with a token created from create_token()")
-  }
-  readRDS(path)
-}
-
 is_auth_rtoot <- function(token) inherits(token, "rtoot_bearer")
 
+#' Convert token to environment variable
+#' @inheritParams verify_credentials
+#' @inheritParams auth_setup
+#' @return Token (in environment variable format), invisibily
+#' @examples
+#' \dontrun{
+#' x <- auth_setup("mastodon.social", "public")
+#' envvar <- convert_token_to_envvar(x)
+#' envvar
+#' }
+#' @export
+convert_token_to_envvar <- function(token, clipboard = TRUE, verbose = TRUE) {
+  envvar_string <- paste0("RTOOT_DEFAULT_TOKEN=\"", token$bearer, ";", token$type, ";", token$instance, "\"")
+  if (isTRUE(clipboard)) {
+    if (clipr::clipr_available()) {
+      clipr::write_clip(envvar_string)
+      sayif(verbose, "Token (in environment variable format) has been copied to clipboard.")
+      }
+  } else {
+    sayif(verbose, "Clipboard is not available.")
+  }
+  return(invisible(envvar_string))
+}
+
+get_token_from_envvar <- function(envvar = "RTOOT_DEFAULT_TOKEN", check_stop = TRUE) {
+  dummy <- list(bearer = "")
+  dummy$type <- ""
+  dummy$instance <- ""
+  class(dummy) <- "rtoot_bearer"
+  if (Sys.getenv(envvar) == "") {
+    if (check_stop) {
+      stop("envvar not found.")
+    } else {
+      ## warn the testers
+      message("You should do software testing with the `RTOOT_DEFAULT_TOKEN` envvar!\nRead: https://github.com/schochastics/rtoot/wiki/vcr")
+      return(dummy)
+    }
+  }
+  res <- strsplit(x = Sys.getenv(envvar), split = ";")[[1]]
+  if (length(res) != 3) {
+    if (check_stop) {
+      stop("Your envvar is malformed")
+    } else {
+      return(NULL)
+    }
+  }
+  bearer <- list(bearer = res[1])
+  bearer$type <- res[2]
+  bearer$instance <- res[3]
+  class(bearer) <- "rtoot_bearer"
+  bearer
+}
+
 # check if a token is available and return one if not
-check_token_rtoot <- function(token = NULL) {
-
+## it checks the envvar RTOOT_DEFAULT_TOKEN first; then RDS;
+check_token_rtoot <- function(token = NULL, verbose = TRUE) {
   selection <- NULL
-
   if(is.null(token)){
-
+    if (Sys.getenv("RTOOT_DEFAULT_TOKEN") != "") {
+      token <- get_token_from_envvar("RTOOT_DEFAULT_TOKEN", check_stop = FALSE)
+      if (!is.null(token)) {
+        return(token)
+      }
+      ## the envvar is malformed, go to the legacy RDS method.
+    }
     token_path <- options("rtoot_token")$rtoot_token
-
     if (length(token_path) == 0) {
       token_path <- utils::head(list.files(tools::R_user_dir("rtoot", "config"),
                                     full.names = TRUE,
@@ -191,31 +258,17 @@ check_token_rtoot <- function(token = NULL) {
     if (isTRUE(file.exists(token_path))) {
       token <- readRDS(token_path)
     } else {
-      if (interactive()) {
-        selection <- utils::menu(
-          c("yes", "no"),
-          title = "This seems to be the first time you are using rtoot. Do you want to authenticate now?"
-        )
-      } else {
-        selection <- 2L
-      }
-    }
-
-    if (isTRUE(selection == 1L)) {
-      token <- auth_setup()
-    } else if (isTRUE(selection == 2L)) {
-      stop("No token found. Please run auth_setup() to authenticate.")
+      selection <- rtoot_menu(title = "This seems to be the first time you are using rtoot. Do you want to authenticate now?",
+                              default = 2L, verbose = verbose)
     }
   } else if (!is_auth_rtoot(token)) {
-    if (interactive()) {
-      selection <- utils::menu(
-        c("yes", "no"),
-        title = "Your token is invalid. Do you want to authenticate now?"
-      )
-    } else {
-      selection <- 2L
-    }
+    selection <- rtoot_menu(title = "Your token is invalid. Do you want to authenticate now?", default = 2L,
+                            verbose = verbose)
   }
-
+  if (isTRUE(selection == 1L)) {
+    token <- auth_setup()
+  } else if (isTRUE(selection == 2L)) {
+    stop("No token found. Please run auth_setup() to authenticate.")
+  }
   invisible(token)
 }

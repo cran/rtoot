@@ -1,9 +1,7 @@
 ## tests for all instance functions
-
-fake_token <- list(bearer = Sys.getenv("RTOOT_DEFAULT_TOKEN"))
+fake_token <- rtoot:::get_token_from_envvar("RTOOT_DEFAULT_TOKEN", check_stop = FALSE)
 fake_token$type <- "user"
 fake_token$instance <- "social.tchncs.de"
-class(fake_token) <- "rtoot_bearer"
 
 test_that("get_fedi_instances", {
   vcr::use_cassette("get_fedi_instances_default", {
@@ -81,7 +79,7 @@ test_that("get_instance_directory", {
     x <- get_instance_directory(instance = "social.tchncs.de", anonymous = FALSE, limit = 3, token = fake_token)
   })
   expect_true("tbl_df" %in% class(x))
-  expect_true(nrow(x) != 0)  
+  expect_true(nrow(x) != 0)
 })
 
 test_that("get_instance_trends", {
@@ -92,6 +90,22 @@ test_that("get_instance_trends", {
   expect_true("tbl_df" %in% class(x))
   vcr::use_cassette("get_instance_trends_anonymous_false", {
     x <- get_instance_trends(instance = "social.tchncs.de", anonymous = FALSE, token = fake_token)
+  })
+  expect_true(nrow(x) != 0)
+  expect_true("tbl_df" %in% class(x))
+})
+
+test_that("get_instance_rules",{
+  vcr::use_cassette("get_instance_rules_default",{
+    x <- get_instance_rules(instance = "social.tchncs.de", anonymous = TRUE)
+  })
+  expect_true(nrow(x) != 0)
+  expect_true("tbl_df" %in% class(x))
+})
+
+test_that("get_instance_blocks",{
+  vcr::use_cassette("get_instance_blocks_default",{
+    x <- get_instance_blocks(instance = "social.tchncs.de", anonymous = TRUE)
   })
   expect_true(nrow(x) != 0)
   expect_true("tbl_df" %in% class(x))
