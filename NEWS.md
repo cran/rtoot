@@ -1,3 +1,10 @@
+# rtoot 0.3.0
+
+* don't throw an error when no rate limit is found (#95)
+* switched API for `get_fedi_instances()` (#122)
+* added minimal endpoint (#123)
+* fixed bugs (#113, #115)
+
 # rtoot 0.2.0
 
 * possible to set token via environment variable (#68)

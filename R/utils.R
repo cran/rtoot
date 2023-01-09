@@ -9,6 +9,36 @@ print.rtoot_bearer <- function(x,...){
   invisible(x)
 }
 
+#' Query Mastodon API
+#'
+#' This is a minimalistic interface for querying the Mastodon API. This function is for advanced users who want to query
+#' the Mastodon API for endpoints that the R functions are not yet implemented.
+#' Please also note that the API responses will not be parsed as tibble. Refer to the official API documentation for endpoints and parameters.
+#' @param endpoint character, a Mastodon API endpoint. Currently, only endpoints using GET are supported
+#' @param ... Name-value pairs giving API parameters.
+#' @param params list, API parameters to be submitted
+#' @inheritParams get_timeline_public
+#' @return a list
+#' @export
+#' @references https://docs.joinmastodon.org/methods/
+#' @examples
+#' \dontrun{
+#' rtoot(endpoint = "api/v1/notifications")
+#' rtoot(endpoint = "api/v1/notifications", limit = 8)
+#' ## same
+#' rtoot(endpoint = "api/v1/notifications", params = list(limit = 8))
+#' rtoot(endpoint = "api/v1/followed_tags")
+#' ## reimplement `get_timeline_public`
+#' rtoot(endpoint = "api/v1/timelines/public", instance = "emacs.ch", local = TRUE, anonymous = TRUE)
+#' }
+rtoot <- function(endpoint, ..., params = list(), token = NULL, instance = NULL,
+                  anonymous = FALSE) {
+  if (missing(endpoint)) {
+    stop("Please provide an `endpoint`", call. = FALSE)
+  }
+  params <- c(list(...), params)
+  make_get_request(token = token, path = endpoint, params = params, instance = instance, anonymous = anonymous)
+}
 
 ## Endpoints under
 ## https://docs.joinmastodon.org/methods/statuses/
@@ -16,9 +46,8 @@ print.rtoot_bearer <- function(x,...){
 
 make_get_request <- function(token, path, params = list(), instance = NULL, anonymous = FALSE, ...) {
   if (is.null(instance) && anonymous) {
-    stop("provide either an instance or a token")
+    stop("provide either an instance or a token", call. = FALSE)
   }
-
   if (is.null(instance)) {
     token <- check_token_rtoot(token)
     url <- prepare_url(token$instance)
@@ -34,7 +63,7 @@ make_get_request <- function(token, path, params = list(), instance = NULL, anon
 
   status_code <- httr::status_code(request_results)
   if (!status_code %in% c(200)) {
-    stop(paste("something went wrong. Status code:", status_code))
+    stop(paste("something went wrong. Status code:", status_code), call. = FALSE)
   }
   output <- httr::content(request_results)
   headers <- parse_header(httr::headers(request_results))
@@ -82,47 +111,35 @@ process_request <- function(token = NULL,
                             page_size = 40L,
                             retryonratelimit = TRUE,
                             verbose = TRUE
-){
+) {
   # if since_id is provided we page forward, otherwise we page backwards
-  if(!is.null(params[["since_id"]])){
+  if(!is.null(params[["since_id"]])) {
     pager <- "since_id"
-  } else{
+  } else {
     pager <- "max_id"
   }
   pages <- ceiling(n/page_size)
   output <- vector("list")
   for(i in seq_len(pages)){
-    tmp <- make_get_request(token = token,path = path,
+    api_response <- make_get_request(token = token,path = path,
                             instance = instance, params = params,
                             anonymous = anonymous)
-
-    if(rate_limit_remaining(tmp)==0){
-      if(isTRUE(retryonratelimit)){
-        wait_until(attr(tmp,"headers")[["rate_reset"]],verbose)
-      } else{
-        output <- c(output,tmp)
-        attr(output,"headers") <- attr(tmp,"headers")
-        sayif(verbose,"rate limit reached and `retryonratelimit=FALSE`. returning current results.")
-        break
-      }
-    }
-    output <- c(output,tmp)
-    attr(output,"headers") <- attr(tmp,"headers")
-    if(is.null(attr(tmp,"headers")[[pager]])){
+    output <- c(output, api_response)
+    attr(output, "headers") <- attr(api_response, "headers")
+    if (break_process_request(api_response = api_response, retryonratelimit = retryonratelimit,
+                              verbose = verbose, pager = pager)) {
       break
     }
-    params[[pager]] <- attr(tmp,"headers")[[pager]]
+    params[[pager]] <- attr(api_response, "headers")[[pager]]
   }
-
   if (isTRUE(parse)) {
-    header <- attr(output,"headers")
+    header <- attr(output, "headers")
 
     output <- FUN(output)
-    attr(output,"headers") <- header
+    attr(output, "headers") <- header
   }
   return(output)
 }
-
 
 ##vectorize function
 v <- function(FUN) {
@@ -154,7 +171,8 @@ rate_limit_remaining <- function(object){
   }
   header <- attr(object,"headers")
   if(is.null(header[["rate_remaining"]])){
-    stop("no rate limit information found")
+    warning("no rate limit information found. Setting it to the default",call. = FALSE)
+    return(300)
   } else{
     return(as.numeric(header[["rate_remaining"]]))
   }
@@ -206,4 +224,20 @@ handle_params <- function(params, max_id, since_id, min_id) {
         params$min_id <- min_id
     }
     params
+}
+
+## a predicate to determine whether to break away from the for-loop of precess_request
+break_process_request <- function(api_response, retryonratelimit = FALSE, verbose = FALSE, pager = "max_id", from = Sys.time()) {
+  if (is.null(attr(api_response,"headers")[[pager]])) {
+    return(TRUE)
+  }
+  if (rate_limit_remaining(api_response) == 0 && isTRUE(retryonratelimit)) {
+    wait_until(until = attr(api_response,"headers")[["rate_reset"]], from = from, verbose = verbose)
+    return(FALSE)
+  }
+  if (rate_limit_remaining(api_response) == 0 && isFALSE(retryonratelimit)) {
+    sayif(verbose,"rate limit reached and `retryonratelimit=FALSE`. returning current results.")
+    return(TRUE)
+  }
+  return(FALSE)
 }
