@@ -1,3 +1,8 @@
+# rtoot 0.3.3
+
+* added support for lists (#135, #136)
+* fixed links after transfer on GitHub 
+
 # rtoot 0.3.2
 
 * added `post_status()` to favourite/bookmark/reblog statuses (#134)
