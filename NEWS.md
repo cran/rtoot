@@ -1,3 +1,8 @@
+# rtoot 0.3.5
+
+* fixed #153 by allowing POSIXct as `max_id`, `min_id` and `since_id` (#154) by @Kudusch
+* fixed #158 for VSCode and similar editors which return TRUE for `rstudio::isAvailable()` (#159)
+
 # rtoot 0.3.4
 
 * added progress bar for long running queries (#141) by @chainsawriot
