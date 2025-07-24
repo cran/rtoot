@@ -4,11 +4,14 @@
 ## get_account_favourites, get_account_blocks,
 ## get_account_mutes
 
-fake_token <- rtoot:::get_token_from_envvar("RTOOT_DEFAULT_TOKEN", check_stop = FALSE)
+fake_token <- rtoot:::get_token_from_envvar(
+  "RTOOT_DEFAULT_TOKEN",
+  check_stop = FALSE
+)
 fake_token$type <- "user"
-fake_token$instance <- "social.tchncs.de"
+fake_token$instance <- "fosstodon.org"
 
-id <- "109281650341067731"
+id <- "109302436954721982"
 
 ## These have a meaningful parse parameter, so need to test `noparse`
 
@@ -19,7 +22,12 @@ test_that("get_account_followers", {
   expect_true("tbl_df" %in% class(x))
   expect_true(nrow(x) != 0)
   vcr::use_cassette("get_account_followers_noparse", {
-    x <- get_account_followers(id = id, limit = 3, parse = FALSE, token = fake_token)
+    x <- get_account_followers(
+      id = id,
+      limit = 3,
+      parse = FALSE,
+      token = fake_token
+    )
   })
   expect_false("tbl_df" %in% class(x))
 })
@@ -31,7 +39,12 @@ test_that("get_account_following", {
   expect_true("tbl_df" %in% class(x))
   expect_true(nrow(x) != 0)
   vcr::use_cassette("get_account_following_noparse", {
-    x <- get_account_following(id = id, limit = 3, parse = FALSE, token = fake_token)
+    x <- get_account_following(
+      id = id,
+      limit = 3,
+      parse = FALSE,
+      token = fake_token
+    )
   })
   expect_false("tbl_df" %in% class(x))
 })
@@ -61,7 +74,6 @@ test_that("get_account_favourites", {
 })
 
 test_that("get_account_blocks", {
-  ## sorry rfortunes, you get blocked for science
   vcr::use_cassette("get_account_blocks_default", {
     x <- get_account_blocks(limit = 3, token = fake_token)
   })

@@ -1,7 +1,7 @@
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
-# rtoot <img src="man/figures/logo.png" align="right"/>
+# rtoot <img src="man/figures/logo.png" align="right" alt="A hex logo showing a friendly cartoon mammoth with the caption 'rtoot'"/>
 
 <!-- badges: start -->
 
@@ -13,6 +13,8 @@ Downloads](https://cranlogs.r-pkg.org/badges/rtoot)](https://CRAN.R-project.org/
 [![Codecov test
 coverage](https://codecov.io/gh/gesistsa/rtoot/branch/main/graph/badge.svg)](https://app.codecov.io/gh/gesistsa/rtoot?branch=main)
 
+[![Codecov test
+coverage](https://codecov.io/gh/gesistsa/rtoot/graph/badge.svg)](https://app.codecov.io/gh/gesistsa/rtoot)
 <!-- badges: end -->
 
 Interact with the [mastodon API](https://docs.joinmastodon.org/api/)
@@ -37,7 +39,7 @@ install.packages("rtoot")
 You can install the development version of rtoot from GitHub:
 
 ``` r
-remotes::install_github("gesistsa/rtoot")
+pak::pak("gesistsa/rtoot")
 ```
 
 ## Authenticate
